@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, flash
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import func
 import os, io, csv, json
@@ -123,9 +123,11 @@ def index():
     recommendations = get_budget_recommendations()
     overall_recommendation = get_overall_recommendation()
     smart_advice = get_smart_budget_advice()
+    edit_mode = session.pop('edit_mode', False)
     return render_template("index.html", income=income_record, budgets=budgets, transactions=transactions,
                            overall_income=overall_income, total_expense=total_expense, overall_balance=overall_balance,
-                           recommendations=recommendations, overall_recommendation=overall_recommendation, smart_advice=smart_advice)
+                           recommendations=recommendations, overall_recommendation=overall_recommendation,
+                           smart_advice=smart_advice, edit_mode=edit_mode)
 
 # Rute untuk menambahkan pemasukan
 @app.route('/add_income', methods=['POST'])
@@ -138,14 +140,22 @@ def add_income():
     except:
         flash("Data pemasukan tidak valid.")
         return redirect(url_for('index'))
-    # Hapus data pemasukan sebelumnya (hanya menyimpan 1 data pemasukan)
-    previous = Income.query.first()
-    if previous:
-        db.session.delete(previous)
-    income_record = Income(amount=amount, date=date_obj)
-    db.session.add(income_record)
-    db.session.commit()
+    income_record = Income.query.first()
+    if income_record and session.get('edit_mode'):
+        # Update data pemasukan jika dalam mode edit
+        income_record.amount = amount
+        income_record.date = date_obj
+        db.session.commit()
+        session.pop('edit_mode', None)
+    else:
+        if income_record:
+            flash("Pemasukan sudah diinput. Gunakan tombol edit untuk mengubah.")
+            return redirect(url_for('index'))
+        income_record = Income(amount=amount, date=date_obj)
+        db.session.add(income_record)
+        db.session.commit()
     return redirect(url_for('index'))
+
 
 # Rute untuk menambahkan anggaran
 @app.route('/add_budget', methods=['POST'])
@@ -355,11 +365,41 @@ def restore():
 
 @app.route('/edit_income')
 def edit_income():
-    income_record = Income.query.first()
-    if income_record:
-        db.session.delete(income_record)
-        db.session.commit()
+    if Income.query.first():
+        session['edit_mode'] = True
     return redirect(url_for('index'))
+
+@app.route('/delete_transaction/<int:transaction_id>')
+def delete_transaction(transaction_id):
+    transaction = Transaction.query.get_or_404(transaction_id)
+    db.session.delete(transaction)
+    db.session.commit()
+    flash("Transaksi berhasil dihapus!")
+    return redirect(url_for('index'))
+
+@app.route('/edit_transaction/<int:transaction_id>', methods=['GET', 'POST'])
+def edit_transaction(transaction_id):
+    transaction = Transaction.query.get_or_404(transaction_id)
+    if request.method == 'POST':
+        category = request.form.get('expense_category')
+        amount = request.form.get('expense_amount')
+        date_str = request.form.get('expense_date')
+        note = request.form.get('expense_note')
+        try:
+            transaction.category = category
+            transaction.amount = float(amount)
+            transaction.date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            transaction.note = note
+            db.session.commit()
+            flash("Transaksi berhasil diupdate!")
+            return redirect(url_for('index'))
+        except Exception as e:
+            flash("Terjadi kesalahan: " + str(e))
+            return redirect(url_for('edit_transaction', transaction_id=transaction_id))
+    # Untuk metode GET, tampilkan form edit dengan data transaksi yang sudah ada.
+    budgets = Budget.query.all()
+    return render_template("edit_transaction.html", transaction=transaction, budgets=budgets)
+
 
 @app.before_request
 def remove_expired_budgets():

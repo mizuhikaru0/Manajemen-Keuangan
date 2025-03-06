@@ -36,19 +36,24 @@
                 <h2>Input Pemasukan Bulanan</h2>
                 <form action="{{ url_for('add_income') }}" method="post">
                     <label for="income_input">Masukkan Gaji/Pemasukan Bulanan:</label>
-                    <input type="number" name="income_input" placeholder="Contoh: 5000000" required {% if income %} disabled {% endif %}>
+                    <input type="number" name="income_input" placeholder="Contoh: 5000000" 
+                           value="{{ income.amount if income else '' }}" 
+                           {% if income and not edit_mode %} disabled {% endif %} required>
                     <label for="income_date">Tanggal Pemasukan:</label>
-                    <input type="date" name="income_date" required {% if income %} disabled {% endif %}>
-                    {% if not income %}
-                        <button type="submit">Simpan Pemasukan</button>
+                    <input type="date" name="income_date" 
+                           value="{{ income.date if income else '' }}" 
+                           {% if income and not edit_mode %} disabled {% endif %} required>
+                    {% if (not income) or edit_mode %}
+                        <button type="submit">{% if edit_mode %}Update Pemasukan{% else %}Simpan Pemasukan{% endif %}</button>
                     {% endif %}
                 </form>
-                {% if income %}
+                {% if income and not edit_mode %}
                     <p>Pemasukan Bulanan: Rp {{ income.amount | number_format }} (Tanggal: {{ income.date }})</p>
                     <a href="{{ url_for('edit_income') }}"><button>Edit Pemasukan</button></a>
                 {% endif %}
             </section>
-        </div>        
+        </div>
+                
 
         <div id="budget" class="tab-content">
             <section id="budget-section">
@@ -174,6 +179,7 @@
                             <th>Kategori</th>
                             <th>Jumlah (Rp)</th>
                             <th>Catatan</th>
+                            <th>Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -184,12 +190,17 @@
                             <td>{{ tx.category }}</td>
                             <td>Rp {{ tx.amount | number_format }}</td>
                             <td>{{ tx.note }}</td>
+                            <td>
+                                <a href="{{ url_for('edit_transaction', transaction_id=tx.id) }}"><button>Edit</button></a>
+                                <a href="{{ url_for('delete_transaction', transaction_id=tx.id) }}" onclick="return confirm('Apakah Anda yakin ingin menghapus transaksi ini?')"><button>Hapus</button></a>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </section>
         </div>
+        
 
         <div id="export" class="tab-content">
             <section id="export-section">

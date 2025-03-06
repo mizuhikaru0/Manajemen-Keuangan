@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Transaksi Pengeluaran</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Edit Transaksi Pengeluaran</h1>
+        <form action="{{ url_for('edit_transaction', transaction_id=transaction.id) }}" method="post">
+            <label for="expense_category">Kategori Pengeluaran:</label>
+            <select name="expense_category" required>
+                <option value="">-- Pilih Kategori --</option>
+                {% for b in budgets %}
+                <option value="{{ b.category }}" {% if transaction.category == b.category %} selected {% endif %}>{{ b.category }}</option>
+                {% endfor %}
+            </select>
+            <label for="expense_amount">Jumlah Pengeluaran (Rp):</label>
+            <input type="number" name="expense_amount" placeholder="Contoh: 50000" value="{{ transaction.amount }}" required>
+            <label for="expense_date">Tanggal Pengeluaran:</label>
+            <input type="date" name="expense_date" value="{{ transaction.date }}" required>
+            <label for="expense_note">Catatan (opsional):</label>
+            <textarea name="expense_note" placeholder="Catatan...">{{ transaction.note }}</textarea>
+            <button type="submit">Update Transaksi</button>
+        </form>
+        <a href="{{ url_for('index') }}"><button>Batal</button></a>
+    </div>
+</body>
+</html>
