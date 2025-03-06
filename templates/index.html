@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Personal Finance Manager - Budget Mode</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Smart Personal Finance Manager - Budget Mode</h1>
+            <a href="{{ url_for('reset_data') }}"><button>Reset Data</button></a>
+            <hr>
+        </header>
+
+        <!-- Navigasi Tab -->
+        <nav class="tabs">
+            <ul>
+                <li data-tab="income" class="active">Pemasukan</li>
+                <li data-tab="budget">Anggaran</li>
+                <li data-tab="expense">Pengeluaran</li>
+                <li data-tab="overview">Ringkasan</li>
+                <li data-tab="chart">Grafik</li>
+                <li data-tab="transaction">Transaksi</li>
+                <li data-tab="export">Ekspor</li>
+            </ul>
+        </nav>
+
+        <!-- Konten Tab -->
+        <div id="income" class="tab-content active">
+            <section id="income-section">
+                <h2>Input Pemasukan Bulanan</h2>
+                <form action="{{ url_for('add_income') }}" method="post">
+                    <label for="income_input">Masukkan Gaji/Pemasukan Bulanan:</label>
+                    <input type="number" name="income_input" placeholder="Contoh: 5000000" required {% if income %} disabled {% endif %}>
+                    <label for="income_date">Tanggal Pemasukan:</label>
+                    <input type="date" name="income_date" required {% if income %} disabled {% endif %}>
+                    {% if not income %}
+                        <button type="submit">Simpan Pemasukan</button>
+                    {% endif %}
+                </form>
+                {% if income %}
+                    <p>Pemasukan Bulanan: Rp {{ income.amount | number_format }} (Tanggal: {{ income.date }})</p>
+                    <a href="{{ url_for('edit_income') }}"><button>Edit Pemasukan</button></a>
+                {% endif %}
+            </section>
+        </div>        
+
+        <div id="budget" class="tab-content">
+            <section id="budget-section">
+                <h2>Atur Anggaran Per Kategori</h2>
+                <form action="{{ url_for('add_budget') }}" method="post">
+                    <label for="budget_category">Nama Kategori:</label>
+                    <input type="text" name="budget_category" placeholder="Misal: Makanan, Transportasi" required>
+                    <label for="budget_amount">Jumlah Anggaran (Rp):</label>
+                    <input type="number" name="budget_amount" placeholder="Misal: 1000000" required>
+                    <label for="budget_start">Tanggal Mulai Anggaran:</label>
+                    <input type="date" name="budget_start" required>
+                    <label for="budget_end">Tanggal Berakhir Anggaran:</label>
+                    <input type="date" name="budget_end" required>
+                    <button type="submit">Tambah Anggaran</button>
+                </form>
+                <div id="budget-list">
+                    {% if budgets %}
+                    <table style="width:100%; border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th>Kategori</th>
+                                <th>Anggaran</th>
+                                <th>Terpakai</th>
+                                <th>Sisa</th>
+                                <th>Periode</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in budgets %}
+                            <tr>
+                                <td>{{ b.category }}</td>
+                                <td>Rp {{ b.allocated | number_format }}</td>
+                                <td>Rp {{ b.spent | number_format }}</td>
+                                <td>Rp {{ (b.allocated - b.spent) | number_format }}</td>
+                                <td>{{ b.start }} s/d {{ b.end }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p>Belum ada anggaran yang ditambahkan.</p>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+
+        <div id="expense" class="tab-content">
+            <section id="expense-section">
+                <h2>Catat Pengeluaran</h2>
+                <form action="{{ url_for('add_expense') }}" method="post">
+                    <label for="expense_category">Pilih Kategori Pengeluaran:</label>
+                    <select name="expense_category" required>
+                        <option value="">-- Pilih Kategori --</option>
+                        {% for b in budgets %}
+                        <option value="{{ b.category }}">{{ b.category }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="expense_amount">Jumlah Pengeluaran (Rp):</label>
+                    <input type="number" name="expense_amount" placeholder="Contoh: 50000" required>
+                    <label for="expense_date">Tanggal Pengeluaran:</label>
+                    <input type="date" name="expense_date" required>
+                    <label for="expense_note">Catatan (opsional):</label>
+                    <textarea name="expense_note" placeholder="Catatan..."></textarea>
+                    <button type="submit">Catat Pengeluaran</button>
+                </form>
+            </section>
+        </div>
+
+        <div id="overview" class="tab-content">
+            <section id="overview-section">
+                <h2>Ringkasan Keuangan</h2>
+                <div id="overall-overview">
+                    <p>Pemasukan Bulanan: Rp {{ overall_income | number_format }} {% if income %}(Tanggal: {{ income.date }}){% endif %}</p>
+                    <p>Total Pengeluaran: Rp {{ total_expense | number_format }}</p>
+                    <p>Sisa Saldo: Rp {{ overall_balance | number_format }}</p>
+                </div>
+                <div id="recommendations">
+                    <h3>Rekomendasi Keuangan</h3>
+                    <p>{{ overall_recommendation }}</p>
+                    {% if recommendations %}
+                    <ul>
+                        {% for rec in recommendations %}
+                        <li>{{ rec }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p>Tidak ada rekomendasi khusus saat ini.</p>
+                    {% endif %}
+                    
+                    <h3>Saran Cerdas untuk Pengelolaan Anggaran</h3>
+                    {% if smart_advice %}
+                    <ul>
+                        {% for advice in smart_advice %}
+                        <li>{{ advice }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p>Tidak ada saran tambahan.</p>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+
+        <div id="chart" class="tab-content">
+            <section id="chart-section">
+                <h2>Grafik Pengeluaran Per Kategori</h2>
+                <canvas id="expenseChart"></canvas>
+            </section>
+            <section id="transaction-chart-section">
+                <h2>Diagram Transaksi Pengeluaran Harian</h2>
+                <canvas id="transactionChart"></canvas>
+            </section>
+        </div>
+
+        <div id="transaction" class="tab-content">
+            <section id="transaction-section">
+                <h2>Daftar Transaksi Pengeluaran</h2>
+                <table id="transaction-table">
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>Tanggal</th>
+                            <th>Kategori</th>
+                            <th>Jumlah (Rp)</th>
+                            <th>Catatan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tx in transactions %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ tx.date }}</td>
+                            <td>{{ tx.category }}</td>
+                            <td>Rp {{ tx.amount | number_format }}</td>
+                            <td>{{ tx.note }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </div>
+
+        <div id="export" class="tab-content">
+            <section id="export-section">
+                <a href="{{ url_for('export_pdf') }}"><button>Export ke PDF</button></a>
+                <a href="{{ url_for('export_excel') }}"><button>Export ke Excel</button></a>
+                <a href="{{ url_for('export_json') }}"><button>Ekspor Data (JSON)</button></a>
+                <form action="{{ url_for('import_json') }}" method="post" enctype="multipart/form-data">
+                    <input type="file" name="import_file" accept=".json" required>
+                    <button type="submit">Impor Data (JSON)</button>
+                </form>
+                <a href="{{ url_for('backup') }}"><button>Backup Data ke Cloud</button></a>
+                <a href="{{ url_for('restore') }}"><button>Restore Data dari Cloud</button></a>
+            </section>
+        </div>
+    </div>
+    
+    <script>
+        // Logika sederhana untuk pergantian tab
+        document.querySelectorAll('.tabs ul li').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.tabs ul li').forEach(function(t) { t.classList.remove('active'); });
+                this.classList.add('active');
+                var tabContent = this.getAttribute('data-tab');
+                document.querySelectorAll('.tab-content').forEach(function(content) {
+                    content.classList.remove('active');
+                });
+                document.getElementById(tabContent).classList.add('active');
+            });
+        });
+        
+        // Inisialisasi Chart.js dapat dilakukan dengan mengambil data melalui AJAX jika diperlukan.
+    </script>
+</body>
+</html>
